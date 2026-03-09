@@ -12,6 +12,9 @@ import {
   Route, Armchair, Clock, Accessibility, Building2, Gauge,
   Footprints, TrafficCone, Layers, Home, UtensilsCrossed,
   Wifi, Wind, Lightbulb, Hand, X, Check, ExternalLink, MapPin,
+  ArrowLeftRight, MoveRight, Bike, Grip, PersonStanding, Leaf,
+  TreePine, Banknote, KeyRound, Phone, Globe, Users, ArrowUp,
+  Umbrella, Tag,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -19,6 +22,9 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Route, Armchair, Clock, Accessibility, Building2, Gauge,
   Footprints, TrafficCone, Layers, Home, UtensilsCrossed,
   Wifi, Wind, Lightbulb, Hand,
+  ArrowLeftRight, MoveRight, Bike, Grip, PersonStanding, Leaf,
+  TreePine, Banknote, KeyRound, Phone, Globe, Users, ArrowUp,
+  Umbrella, Tag,
 };
 
 interface QuestPanelProps {
@@ -27,9 +33,10 @@ interface QuestPanelProps {
   user: OsmUser | null;
   onClose: () => void;
   onSolved: () => void;
+  onCustomTag?: () => void;
 }
 
-export default function QuestPanel({ quest, locale, user, onClose, onSolved }: QuestPanelProps) {
+export default function QuestPanel({ quest, locale, user, onClose, onSolved, onCustomTag }: QuestPanelProps) {
   const [selectedAnswer, setSelectedAnswer] = useState<string>("");
   const [textAnswer, setTextAnswer] = useState("");
   const [numberAnswer, setNumberAnswer] = useState("");
@@ -56,29 +63,20 @@ export default function QuestPanel({ quest, locale, user, onClose, onSolved }: Q
 
   const handleSubmit = async () => {
     let value = "";
-
-    if (questType.answerType === "select") {
-      value = selectedAnswer;
-    } else if (questType.answerType === "yesno") {
-      value = selectedAnswer;
-    } else if (questType.answerType === "number") {
-      value = numberAnswer;
-    } else if (questType.answerType === "text") {
-      value = textAnswer;
-    }
+    if (questType.answerType === "select" || questType.answerType === "yesno") value = selectedAnswer;
+    else if (questType.answerType === "number") value = numberAnswer;
+    else if (questType.answerType === "text") value = textAnswer;
 
     if (!value) {
       toast.error(locale === "cs" ? "Vyberte odpoved" : "Please select an answer");
       return;
     }
-
     if (!user) {
       toast.error(t(locale, "auth", "loginRequired"));
       return;
     }
 
     setSubmitting(true);
-
     try {
       const res = await fetch("/api/osm/edit", {
         method: "POST",
@@ -93,7 +91,6 @@ export default function QuestPanel({ quest, locale, user, onClose, onSolved }: Q
       });
 
       const data = await res.json();
-
       if (data.success) {
         const solved: SolvedQuest = {
           questTypeId: quest.questTypeId,
@@ -105,7 +102,6 @@ export default function QuestPanel({ quest, locale, user, onClose, onSolved }: Q
           changesetId: data.changesetId,
         };
         addSolvedQuest(solved);
-
         toast.success(t(locale, "quests", "solved"), {
           description: `${questType.osmTag}=${value}`,
           action: data.changesetId ? {
@@ -113,12 +109,11 @@ export default function QuestPanel({ quest, locale, user, onClose, onSolved }: Q
             onClick: () => window.open(`https://www.openstreetmap.org/changeset/${data.changesetId}`, "_blank"),
           } : undefined,
         });
-
         onSolved();
       } else {
         toast.error(data.error || "Failed to submit edit");
       }
-    } catch (err) {
+    } catch {
       toast.error("Network error");
     } finally {
       setSubmitting(false);
@@ -130,7 +125,7 @@ export default function QuestPanel({ quest, locale, user, onClose, onSolved }: Q
       {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b border-border">
         <div
-          className="flex h-10 w-10 items-center justify-center rounded-lg"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
           style={{ background: questType.color, color: "white" }}
         >
           <IconComp size={20} />
@@ -157,9 +152,15 @@ export default function QuestPanel({ quest, locale, user, onClose, onSolved }: Q
 
       {/* Answers */}
       <div className="flex-1 overflow-y-auto p-4">
-        {questType.answerType === "select" && questType.answers && (
+        {(questType.answerType === "select" || questType.answerType === "yesno") && (
           <div className="flex flex-col gap-2">
-            {questType.answers.map((answer) => (
+            {(questType.answerType === "yesno"
+              ? [
+                  { value: "yes", labelKey: "yes" },
+                  { value: "no", labelKey: "no" },
+                ]
+              : questType.answers!
+            ).map((answer) => (
               <button
                 key={answer.value}
                 onClick={() => setSelectedAnswer(answer.value)}
@@ -170,49 +171,19 @@ export default function QuestPanel({ quest, locale, user, onClose, onSolved }: Q
                 }`}
               >
                 <div
-                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
-                    selectedAnswer === answer.value
-                      ? "border-primary bg-primary"
-                      : "border-muted-foreground"
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+                    selectedAnswer === answer.value ? "border-primary bg-primary" : "border-muted-foreground"
                   }`}
                 >
                   {selectedAnswer === answer.value && (
                     <Check size={12} className="text-primary-foreground" />
                   )}
                 </div>
-                <span>{getAnswerLabel(answer)}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {questType.answerType === "yesno" && (
-          <div className="flex flex-col gap-2">
-            {[
-              { value: "yes", label: t(locale, "app", "yes") },
-              { value: "no", label: t(locale, "app", "no") },
-            ].map((option) => (
-              <button
-                key={option.value}
-                onClick={() => setSelectedAnswer(option.value)}
-                className={`flex items-center gap-3 rounded-lg border p-4 text-left text-sm font-medium transition-all ${
-                  selectedAnswer === option.value
-                    ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary"
-                    : "border-border bg-card text-foreground hover:border-primary/50"
-                }`}
-              >
-                <div
-                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${
-                    selectedAnswer === option.value
-                      ? "border-primary bg-primary"
-                      : "border-muted-foreground"
-                  }`}
-                >
-                  {selectedAnswer === option.value && (
-                    <Check size={14} className="text-primary-foreground" />
-                  )}
-                </div>
-                <span className="text-base">{option.label}</span>
+                <span>
+                  {questType.answerType === "yesno"
+                    ? t(locale, "app", answer.labelKey)
+                    : getAnswerLabel(answer)}
+                </span>
               </button>
             ))}
           </div>
@@ -223,14 +194,14 @@ export default function QuestPanel({ quest, locale, user, onClose, onSolved }: Q
             <Input
               type="number"
               min="1"
-              max="200"
+              max="999"
               value={numberAnswer}
               onChange={(e) => setNumberAnswer(e.target.value)}
               placeholder={locale === "cs" ? "Zadejte cislo..." : "Enter a number..."}
               className="text-center text-2xl h-14"
             />
             <div className="flex gap-2 flex-wrap">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 10, 12].map((n) => (
+              {[1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 20].map((n) => (
                 <Button
                   key={n}
                   variant={numberAnswer === String(n) ? "default" : "outline"}
@@ -252,40 +223,63 @@ export default function QuestPanel({ quest, locale, user, onClose, onSolved }: Q
               onChange={(e) => setTextAnswer(e.target.value)}
               placeholder={locale === "cs" ? "Zadejte hodnotu..." : "Enter a value..."}
             />
-            <p className="text-xs text-muted-foreground">
-              {locale === "cs"
-                ? "Pro oteviraci hodiny pouzijte format OSM, napr.: Mo-Fr 08:00-17:00; Sa 09:00-13:00"
-                : "For opening hours, use OSM format, e.g.: Mo-Fr 08:00-17:00; Sa 09:00-13:00"}
-            </p>
+            {questType.id === "opening_hours" && (
+              <div className="flex flex-col gap-1">
+                <p className="text-xs text-muted-foreground">
+                  {locale === "cs"
+                    ? "Format OSM, napr.: Mo-Fr 08:00-17:00; Sa 09:00-13:00"
+                    : "OSM format, e.g.: Mo-Fr 08:00-17:00; Sa 09:00-13:00"}
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {["Mo-Fr 09:00-18:00", "Mo-Su 00:00-24:00", "Mo-Fr 08:00-17:00; Sa 09:00-13:00"].map((tpl) => (
+                    <button
+                      key={tpl}
+                      onClick={() => setTextAnswer(tpl)}
+                      className="text-[10px] rounded bg-muted px-2 py-1 text-muted-foreground hover:text-foreground hover:bg-muted/70 font-mono transition-colors"
+                    >
+                      {tpl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {questType.id === "phone" && (
+              <p className="text-xs text-muted-foreground">
+                {locale === "cs" ? "Format: +420 123 456 789" : "Format: +1 234 567 8900"}
+              </p>
+            )}
+            {questType.id === "website" && (
+              <p className="text-xs text-muted-foreground">
+                {locale === "cs" ? "Napr.: https://example.com" : "E.g.: https://example.com"}
+              </p>
+            )}
           </div>
         )}
       </div>
 
       {/* Actions */}
-      <div className="flex gap-2 border-t border-border p-4 bg-card">
-        <Button
-          variant="outline"
-          className="flex-1"
-          onClick={onClose}
-        >
+      <div className="flex gap-2 border-t border-border p-3 bg-card">
+        <Button variant="ghost" size="sm" className="shrink-0" onClick={onClose}>
           {t(locale, "app", "skip")}
         </Button>
+        {onCustomTag && (
+          <Button variant="outline" size="sm" className="shrink-0" onClick={onCustomTag}>
+            <Tag size={13} className="mr-1" />
+            {locale === "cs" ? "Vlast. tag" : "Custom"}
+          </Button>
+        )}
         <Button
           className="flex-1"
+          size="sm"
           onClick={handleSubmit}
           disabled={submitting || (!selectedAnswer && !textAnswer && !numberAnswer)}
         >
           {submitting ? (
-            <span className="flex items-center gap-2">
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
-              {t(locale, "app", "submit")}
-            </span>
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent mr-1.5" />
           ) : (
-            <>
-              <Check size={16} className="mr-1" />
-              {t(locale, "app", "submit")}
-            </>
+            <Check size={15} className="mr-1" />
           )}
+          {t(locale, "app", "submit")}
         </Button>
       </div>
 
