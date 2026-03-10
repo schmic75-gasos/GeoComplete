@@ -20,6 +20,7 @@ interface GeoMapProps {
   notes: OsmNote[];
   showNotes: boolean;
   selectedQuest: QuestItem | null;
+  selectedNote: OsmNote | null;
   onSelectQuest: (quest: QuestItem | null) => void;
   onSelectNote: (note: OsmNote | null) => void;
   onBoundsChange: (bounds: { south: number; west: number; north: number; east: number }, zoom: number) => void;
@@ -81,6 +82,7 @@ export default function GeoMap({
   notes,
   showNotes,
   selectedQuest,
+  selectedNote,
   onSelectQuest,
   onSelectNote,
   onBoundsChange,
@@ -252,11 +254,19 @@ export default function GeoMap({
   useEffect(() => {
     if (selectedQuest && mapInstanceRef.current) {
       mapInstanceRef.current.panTo([selectedQuest.lat, selectedQuest.lon], {
-        animate: true,
-        duration: 0.4,
+        animate: true, duration: 0.4,
       });
     }
   }, [selectedQuest]);
+
+  // Pan to selected note
+  useEffect(() => {
+    if (selectedNote && mapInstanceRef.current) {
+      mapInstanceRef.current.panTo([selectedNote.lat, selectedNote.lon], {
+        animate: true, duration: 0.4,
+      });
+    }
+  }, [selectedNote]);
 
   // Cursor for note creation mode
   useEffect(() => {

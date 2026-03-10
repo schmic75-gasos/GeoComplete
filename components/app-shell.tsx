@@ -39,6 +39,8 @@ export default function AppShell() {
   const [locale, setLocaleState] = useState<Locale>("en");
   const [user, setUser] = useState<OsmUser | null>(null);
   const [quests, setQuests] = useState<QuestItem[]>([]);
+  // `allFetchedQuests` holds the raw Overpass results; `quests` is the filtered view
+  const allFetchedQuestsRef = useRef<QuestItem[]>([]);
   const [notes, setNotes] = useState<OsmNote[]>([]);
   const [selectedQuest, setSelectedQuest] = useState<QuestItem | null>(null);
   const [selectedNote, setSelectedNote] = useState<OsmNote | null>(null);
@@ -102,18 +104,22 @@ export default function AppShell() {
 
   const loadQuests = useCallback(async (bounds: BBox) => {
     if (isBBoxTooLarge(bounds)) {
+      allFetchedQuestsRef.current = [];
       setQuests([]);
       return;
     }
     const activeTypes = QUEST_TYPES.filter((qt) => enabledTypes.includes(qt.id));
-    if (activeTypes.length === 0) { setQuests([]); return; }
+    if (activeTypes.length === 0) { allFetchedQuestsRef.current = []; setQuests([]); return; }
 
     setLoading(true);
     try {
       const items = await fetchQuests(bounds, activeTypes, 150);
       const solvedIds = new Set(getSolvedQuests().map((s) => `${s.questTypeId}-${s.elementId}`));
       const filtered = items.filter((q) => !solvedIds.has(`${q.questTypeId}-${q.id}`));
-      setQuests(filtered);
+      allFetchedQuestsRef.current = filtered;
+      // Apply enabled filter immediately
+      const visible = filtered.filter((q) => enabledTypes.includes(q.questTypeId));
+      setQuests(visible);
       setCacheStats(getCacheStats());
     } catch (err) {
       console.error("Failed to fetch quests:", err);
@@ -184,6 +190,9 @@ export default function AppShell() {
     setEnabledTypes((prev) => {
       const next = prev.includes(typeId) ? prev.filter((id) => id !== typeId) : [...prev, typeId];
       setEnabledQuestTypes(next);
+      // Immediately re-filter the map without a new API call
+      const visible = allFetchedQuestsRef.current.filter((q) => next.includes(q.questTypeId));
+      setQuests(visible);
       return next;
     });
   };
@@ -198,7 +207,13 @@ export default function AppShell() {
     setCustomTagMode(false);
     setSolved(getSolvedQuests());
     setMobileSheetOpen(false);
-    if (boundsRef.current) loadQuests(boundsRef.current);
+    // Re-apply filter after solving so the solved quest disappears immediately
+    const solvedIds = new Set(getSolvedQuests().map((s) => `${s.questTypeId}-${s.elementId}`));
+    const visible = allFetchedQuestsRef.current.filter(
+      (q) => !solvedIds.has(`${q.questTypeId}-${q.id}`) && enabledTypes.includes(q.questTypeId)
+    );
+    allFetchedQuestsRef.current = visible;
+    setQuests(visible);
   };
   const handleSelectQuest = (q: QuestItem | null) => {
     setSelectedQuest(q);
@@ -543,6 +558,7 @@ export default function AppShell() {
             notes={notes}
             showNotes={showNotes}
             selectedQuest={selectedQuest}
+            selectedNote={selectedNote}
             onSelectQuest={handleSelectQuest}
             onSelectNote={handleSelectNote}
             onBoundsChange={handleBoundsChange}
@@ -561,58 +577,76 @@ export default function AppShell() {
           {/* ===== MOBILE BOTTOM SHEET ===== */}
           {/* Quest/Note detail sheet */}
           {mobileSheetOpen && (mobileSheetTab === "quest" || mobileSheetTab === "note") && (
-            <div className="md:hidden absolute bottom-0 left-0 right-0 z-[600] bg-card border-t border-border rounded-t-2xl shadow-2xl"
-              style={{ maxHeight: "70vh", overflowY: "auto" }}>
-              {/* Drag handle */}
-              <div className="flex justify-center pt-2 pb-1">
-                <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
+            <div
+              className="md:hidden absolute bottom-0 left-0 right-0 z-[600] bg-card border-t border-border rounded-t-2xl shadow-2xl flex flex-col"
+              style={{ maxHeight: "78vh" }}
+            >
+              {/* Drag handle + close */}
+              <div className="flex items-center justify-between px-4 pt-2 pb-1 shrink-0">
+                <div className="h-1 w-10 rounded-full bg-muted-foreground/30 mx-auto" />
               </div>
-              {mobileSheetTab === "quest" && selectedQuest && !customTagMode && (
-                <QuestPanel
-                  quest={selectedQuest}
-                  locale={locale}
-                  user={user}
-                  onClose={() => { setSelectedQuest(null); setMobileSheetOpen(false); }}
-                  onSolved={handleQuestSolved}
-                  onCustomTag={() => setCustomTagMode(true)}
-                />
-              )}
-              {mobileSheetTab === "quest" && selectedQuest && customTagMode && (
-                <CustomTagPanel
-                  quest={selectedQuest}
-                  locale={locale}
-                  user={user}
-                  onClose={() => setCustomTagMode(false)}
-                  onSolved={handleQuestSolved}
-                />
-              )}
-              {mobileSheetTab === "note" && selectedNote && (
-                <NotesPanel
-                  note={selectedNote}
-                  locale={locale}
-                  user={user}
-                  onClose={() => { setSelectedNote(null); setMobileSheetOpen(false); }}
-                  onUpdated={() => { loadNotes(); setSelectedNote(null); setMobileSheetOpen(false); }}
-                />
-              )}
+              <div className="flex-1 overflow-y-auto overscroll-contain">
+                {mobileSheetTab === "quest" && selectedQuest && !customTagMode && (
+                  <QuestPanel
+                    quest={selectedQuest}
+                    locale={locale}
+                    user={user}
+                    onClose={() => { setSelectedQuest(null); setMobileSheetOpen(false); }}
+                    onSolved={handleQuestSolved}
+                    onCustomTag={() => setCustomTagMode(true)}
+                  />
+                )}
+                {mobileSheetTab === "quest" && selectedQuest && customTagMode && (
+                  <CustomTagPanel
+                    quest={selectedQuest}
+                    locale={locale}
+                    user={user}
+                    onClose={() => setCustomTagMode(false)}
+                    onSolved={handleQuestSolved}
+                  />
+                )}
+                {mobileSheetTab === "note" && selectedNote && (
+                  <NotesPanel
+                    note={selectedNote}
+                    locale={locale}
+                    user={user}
+                    onClose={() => { setSelectedNote(null); setMobileSheetOpen(false); }}
+                    onUpdated={() => { loadNotes(); setSelectedNote(null); setMobileSheetOpen(false); }}
+                  />
+                )}
+              </div>
             </div>
           )}
 
           {/* Quest list bottom sheet */}
           {mobileSheetOpen && mobileSheetTab === "list" && (
-            <div className="md:hidden absolute bottom-0 left-0 right-0 z-[600] bg-card border-t border-border rounded-t-2xl shadow-2xl"
-              style={{ maxHeight: "60vh" }}>
-              <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-border">
-                <div className="flex items-center gap-2">
-                  <div className="h-1 w-10 rounded-full bg-muted-foreground/30 absolute top-2 left-1/2 -translate-x-1/2" />
-                  <span className="text-sm font-semibold text-foreground">{t(locale, "quests", "title")}</span>
-                  <Badge variant="secondary" className="text-xs">{totalQuests}</Badge>
+            <div
+              className="md:hidden absolute bottom-0 left-0 right-0 z-[600] bg-card border-t border-border rounded-t-2xl shadow-2xl flex flex-col"
+              style={{ maxHeight: "65vh" }}
+            >
+              <div className="shrink-0">
+                <div className="flex justify-center pt-2">
+                  <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
                 </div>
-                <button onClick={() => setMobileSheetOpen(false)} className="text-muted-foreground hover:text-foreground">
-                  <ChevronDown size={18} />
-                </button>
+                <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground">{t(locale, "quests", "title")}</span>
+                    <Badge variant="secondary" className="text-xs">{totalQuests}</Badge>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {!autoLoad && (
+                      <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { handleRefresh(); }} disabled={loading || zoomTooLow}>
+                        <RefreshCw size={11} className={`mr-1 ${loading ? "animate-spin" : ""}`} />
+                        {t(locale, "map", "loadNow")}
+                      </Button>
+                    )}
+                    <button onClick={() => setMobileSheetOpen(false)} className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                      <ChevronDown size={16} />
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div style={{ maxHeight: "calc(60vh - 52px)", overflowY: "auto" }}>
+              <div className="flex-1 overflow-y-auto overscroll-contain">
                 <QuestList quests={quests} locale={locale} loading={loading} zoomTooLow={zoomTooLow} onSelect={handleSelectQuest} />
               </div>
             </div>
@@ -754,13 +788,13 @@ function NotesList({ notes, locale, showNotes, onToggleNotes, onSelect, creating
 }) {
   return (
     <ScrollArea className="h-full">
-      <div className="p-4 flex flex-col gap-3">
+      <div className="p-3 flex flex-col gap-2">
         <Button variant={showNotes ? "default" : "outline"} size="sm" onClick={onToggleNotes} className="w-full">
-          <MessageSquare size={14} className="mr-1" />
+          <MessageSquare size={14} className="mr-1.5" />
           {t(locale, "notes", showNotes ? "hideNotes" : "showNotes")}
         </Button>
         {showNotes && notes.length === 0 && (
-          <div className="text-center py-6">
+          <div className="text-center py-8">
             <MessageSquare size={32} className="mx-auto text-muted-foreground/30 mb-2" />
             <p className="text-sm text-muted-foreground">{t(locale, "notes", "noNotes")}</p>
           </div>
@@ -771,18 +805,24 @@ function NotesList({ notes, locale, showNotes, onToggleNotes, onSelect, creating
               <button
                 key={note.id}
                 onClick={() => onSelect(note)}
-                className="w-full flex items-start gap-2 p-2 rounded-lg border border-border hover:bg-muted/50 active:bg-muted text-left transition-colors"
+                className="w-full flex items-start gap-2.5 p-2.5 rounded-lg border border-border hover:bg-muted/50 active:bg-muted text-left transition-colors"
               >
-                <div className={`mt-0.5 h-2.5 w-2.5 rounded-sm shrink-0 ${note.status === "open" ? "bg-destructive" : "bg-muted-foreground"}`} />
+                <div className={`mt-1 h-2 w-2 rounded-sm shrink-0 ${note.status === "open" ? "bg-destructive" : "bg-muted-foreground"}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-foreground line-clamp-2">{note.comments[0]?.text?.slice(0, 120) || "..."}</p>
+                  <p className="text-xs text-foreground line-clamp-2 leading-relaxed">
+                    {note.comments[0]?.text?.slice(0, 100) || "..."}
+                  </p>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-muted-foreground">#{note.id}</span>
-                    <Badge variant={note.status === "open" ? "destructive" : "secondary"} className="text-xs px-1 py-0 h-4">
+                    <span className="text-[10px] text-muted-foreground">#{note.id}</span>
+                    <Badge
+                      variant={note.status === "open" ? "destructive" : "secondary"}
+                      className="text-[9px] px-1 py-0 h-3.5"
+                    >
                       {t(locale, "notes", note.status)}
                     </Badge>
                   </div>
                 </div>
+                <MapPin size={12} className="text-muted-foreground/50 shrink-0 mt-1" />
               </button>
             ))}
           </div>
