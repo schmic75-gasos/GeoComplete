@@ -8,13 +8,14 @@ import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import OpeningHoursEditor from "@/components/opening-hours-editor";
 import {
   Route, Armchair, Clock, Accessibility, Building2, Gauge,
   Footprints, TrafficCone, Layers, Home, UtensilsCrossed,
   Wifi, Wind, Lightbulb, Hand, X, Check, ExternalLink, MapPin,
   ArrowLeftRight, MoveRight, Bike, Grip, PersonStanding, Leaf,
   TreePine, Banknote, KeyRound, Phone, Globe, Users, ArrowUp,
-  Umbrella, Tag,
+  Umbrella, Tag, Trash2, Building,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -24,7 +25,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Wifi, Wind, Lightbulb, Hand,
   ArrowLeftRight, MoveRight, Bike, Grip, PersonStanding, Leaf,
   TreePine, Banknote, KeyRound, Phone, Globe, Users, ArrowUp,
-  Umbrella, Tag,
+  Umbrella, Tag, Trash2, Building,
 };
 
 interface QuestPanelProps {
@@ -87,6 +88,9 @@ export default function QuestPanel({ quest, locale, user, onClose, onSolved, onC
           tag: questType.osmTag,
           value,
           comment: `Add ${questType.osmTag}=${value} via GeoComplete`,
+          questTypeId: quest.questTypeId,
+          lat: quest.lat,
+          lon: quest.lon,
         }),
       });
 
@@ -216,43 +220,33 @@ export default function QuestPanel({ quest, locale, user, onClose, onSolved, onC
           </div>
         )}
 
-        {questType.answerType === "text" && (
+        {questType.answerType === "text" && questType.id !== "opening_hours" && (
           <div className="flex flex-col gap-3">
             <Input
               value={textAnswer}
               onChange={(e) => setTextAnswer(e.target.value)}
               placeholder={locale === "cs" ? "Zadejte hodnotu..." : "Enter a value..."}
             />
-            {questType.id === "opening_hours" && (
-              <div className="flex flex-col gap-1">
-                <p className="text-xs text-muted-foreground">
-                  {locale === "cs"
-                    ? "Format OSM, napr.: Mo-Fr 08:00-17:00; Sa 09:00-13:00"
-                    : "OSM format, e.g.: Mo-Fr 08:00-17:00; Sa 09:00-13:00"}
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {["Mo-Fr 09:00-18:00", "Mo-Su 00:00-24:00", "Mo-Fr 08:00-17:00; Sa 09:00-13:00"].map((tpl) => (
-                    <button
-                      key={tpl}
-                      onClick={() => setTextAnswer(tpl)}
-                      className="text-[10px] rounded bg-muted px-2 py-1 text-muted-foreground hover:text-foreground hover:bg-muted/70 font-mono transition-colors"
-                    >
-                      {tpl}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
             {questType.id === "phone" && (
               <p className="text-xs text-muted-foreground">
-                {locale === "cs" ? "Format: +420 123 456 789" : "Format: +1 234 567 8900"}
+                {locale === "cs" ? "Formát: +420 123 456 789" : "Format: +1 234 567 8900"}
               </p>
             )}
             {questType.id === "website" && (
               <p className="text-xs text-muted-foreground">
-                {locale === "cs" ? "Napr.: https://example.com" : "E.g.: https://example.com"}
+                {locale === "cs" ? "Např.: https://example.com" : "E.g.: https://example.com"}
               </p>
             )}
+          </div>
+        )}
+
+        {questType.answerType === "text" && questType.id === "opening_hours" && (
+          <div className="flex flex-col gap-3">
+            <OpeningHoursEditor
+              value={textAnswer}
+              onChange={setTextAnswer}
+              locale={locale}
+            />
           </div>
         )}
       </div>

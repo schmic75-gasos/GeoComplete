@@ -13,6 +13,7 @@ import QuestPanel from "@/components/quest-panel";
 import CustomTagPanel from "@/components/custom-tag-panel";
 import NotesPanel from "@/components/notes-panel";
 import CreateNoteDialog from "@/components/create-note-dialog";
+import AddPoiDialog from "@/components/add-poi-dialog";
 import StatsPanel from "@/components/stats-panel";
 import LeaderboardPanel from "@/components/leaderboard-panel";
 import QuestFilter from "@/components/quest-filter";
@@ -52,6 +53,9 @@ export default function AppShell() {
   const [enabledTypes, setEnabledTypes] = useState<string[]>(QUEST_TYPES.map((q) => q.id));
   const [creatingNote, setCreatingNote] = useState(false);
   const [noteCreatePos, setNoteCreatePos] = useState<{ lat: number; lon: number } | null>(null);
+  const [poiDialogOpen, setPoiDialogOpen] = useState(false);
+  const [poiCreatePos, setPoiCreatePos] = useState<{ lat: number; lon: number } | null>(null);
+  const [creatingPoi, setCreatingPoi] = useState(false);
   const [dark, setDark] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mapLayer, setMapLayer] = useState<MapLayer>("standard");
@@ -410,6 +414,15 @@ export default function AppShell() {
                         {loading ? <Loader2 size={12} className="animate-spin" /> : t(locale, "map", "loadNow")}
                       </Button>
                     )}
+                    <Button
+                      variant={creatingPoi ? "default" : "ghost"}
+                      size="icon"
+                      className="h-7 w-7"
+                      title={locale === "cs" ? "Přidat místo (POI)" : "Add POI"}
+                      onClick={() => setCreatingPoi((v) => !v)}
+                    >
+                      <Plus size={14} />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRefresh} disabled={loading}>
                       <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
                     </Button>
@@ -566,6 +579,10 @@ export default function AppShell() {
               if (creatingNote) {
                 setNoteCreatePos({ lat, lon });
                 setCreatingNote(false);
+              } else if (creatingPoi) {
+                setPoiCreatePos({ lat, lon });
+                setCreatingPoi(false);
+                setPoiDialogOpen(true);
               }
             }}
             creatingNote={creatingNote}
@@ -665,19 +682,45 @@ export default function AppShell() {
           )}
         </div>
 
-        {/* Note creation dialog */}
-        {noteCreatePos && (
-          <CreateNoteDialog
-            open={true}
-            lat={noteCreatePos.lat}
-            lon={noteCreatePos.lon}
-            locale={locale}
-            onClose={() => setNoteCreatePos(null)}
-            onCreated={() => { setNoteCreatePos(null); loadNotes(); }}
-          />
-        )}
+          {/* Note creation dialog */}
+          {noteCreatePos && (
+            <CreateNoteDialog
+              open={true}
+              lat={noteCreatePos.lat}
+              lon={noteCreatePos.lon}
+              locale={locale}
+              onClose={() => setNoteCreatePos(null)}
+              onCreated={() => { setNoteCreatePos(null); loadNotes(); }}
+            />
+          )}
 
-        <Toaster richColors position="bottom-right" />
+          {/* Add POI dialog */}
+          {poiCreatePos && (
+            <AddPoiDialog
+              open={poiDialogOpen}
+              lat={poiCreatePos.lat}
+              lon={poiCreatePos.lon}
+              locale={locale}
+              user={user}
+              onClose={() => { setPoiDialogOpen(false); setPoiCreatePos(null); }}
+              onAdded={() => { setPoiDialogOpen(false); setPoiCreatePos(null); }}
+            />
+          )}
+
+          {/* Cancel POI placement banner */}
+          {creatingPoi && (
+            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[600] flex items-center gap-3 rounded-xl border border-border bg-card/95 backdrop-blur px-4 py-2.5 shadow-xl">
+              <MapPin size={15} className="text-primary animate-bounce" />
+              <span className="text-sm font-medium text-foreground">
+                {locale === "cs" ? "Klikněte na mapu pro umístění místa" : "Click on the map to place the POI"}
+              </span>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setCreatingPoi(false)}>
+                {t(locale, "poi", "cancelPlacement")}
+              </Button>
+            </div>
+          )}
+
+          <Toaster richColors position="bottom-right" />
       </div>
     </TooltipProvider>
   );
