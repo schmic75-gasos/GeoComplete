@@ -76,7 +76,7 @@ async function closeStaleChangesets(osmUserId: number, sql: ReturnType<typeof ne
     SELECT changeset_id FROM changeset_pool
     WHERE osm_user_id = ${osmUserId}
       AND closed = FALSE
-      AND last_used_at < NOW() - INTERVAL '${CHANGESET_MAX_AGE_MS} milliseconds'
+      AND last_used_at < NOW() - INTERVAL '30 minutes'
   `;
   for (const row of stale) {
     try {
@@ -91,7 +91,7 @@ async function closeStaleChangesets(osmUserId: number, sql: ReturnType<typeof ne
       UPDATE changeset_pool SET closed = TRUE
       WHERE osm_user_id = ${osmUserId}
         AND closed = FALSE
-        AND last_used_at < NOW() - INTERVAL '${CHANGESET_MAX_AGE_MS} milliseconds'
+        AND last_used_at < NOW() - INTERVAL '30 minutes'
     `;
   }
 }
