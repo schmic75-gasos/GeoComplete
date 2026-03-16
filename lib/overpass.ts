@@ -20,8 +20,8 @@ export interface BBox {
 // We snap the world into 0.05° tiles and cache per-tile, so zooming in never
 // re-requests data already in memory. TTL = 10 minutes.
 const TILE_DEG = 0.05;
-const CACHE_TTL = 10 * 60 * 1000;
-const LS_KEY = "gc_quest_cache_v3";
+const CACHE_TTL = 60 * 60 * 1000; // 60 minutes
+const LS_KEY = "gc_quest_cache_v4";
 
 interface TileEntry {
   items: QuestItem[];

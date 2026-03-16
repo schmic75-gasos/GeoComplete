@@ -26,6 +26,7 @@ interface GeoMapProps {
   onBoundsChange: (bounds: { south: number; west: number; north: number; east: number }, zoom: number) => void;
   onMapClick: (lat: number, lon: number) => void;
   creatingNote: boolean;
+  creatingPoi: boolean;
   mapLayer: MapLayer;
   onMapLayerChange: (layer: MapLayer) => void;
   locale: Locale;
@@ -88,6 +89,7 @@ export default function GeoMap({
   onBoundsChange,
   onMapClick,
   creatingNote,
+  creatingPoi,
   mapLayer,
   onMapLayerChange,
   locale,
@@ -97,6 +99,11 @@ export default function GeoMap({
   const questLayerRef = useRef<import("leaflet").LayerGroup | null>(null);
   const noteLayerRef = useRef<import("leaflet").LayerGroup | null>(null);
   const tileLayerRef = useRef<import("leaflet").TileLayer | null>(null);
+  // Tracks whether we are in a placement mode so the generic click handler skips
+  const placementModeRef = useRef(false);
+  // Stable ref for onMapClick so placement handler never captures a stale closure
+  const onMapClickRef = useRef(onMapClick);
+  useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
   const [mapReady, setMapReady] = useState(false);
   const [currentZoom, setCurrentZoom] = useState(15);
 
@@ -168,9 +175,11 @@ export default function GeoMap({
       map.on("moveend", reportBounds);
       map.on("zoomend", reportBounds);
 
-      // Handle click/tap for note creation
+      // Map click — only fires when NOT in placement mode (placement is handled below)
       map.on("click", (e: import("leaflet").LeafletMouseEvent) => {
-        onMapClick(e.latlng.lat, e.latlng.lng);
+        if (!placementModeRef.current) {
+          onMapClick(e.latlng.lat, e.latlng.lng);
+        }
       });
 
       if (navigator.geolocation) {
@@ -268,12 +277,33 @@ export default function GeoMap({
     }
   }, [selectedNote]);
 
-  // Cursor for note creation mode
+  // Placement mode (note OR poi) — intercept the very next map click
   useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !mapReady) return;
+
+    const isPlacing = creatingNote || creatingPoi;
+    placementModeRef.current = isPlacing;
+
     if (mapRef.current) {
-      mapRef.current.style.cursor = creatingNote ? "crosshair" : "";
+      mapRef.current.style.cursor = isPlacing ? "crosshair" : "";
     }
-  }, [creatingNote]);
+
+    if (!isPlacing) return;
+
+    // Handler: fire onMapClick then exit placement mode
+    const handler = (e: import("leaflet").LeafletMouseEvent) => {
+      placementModeRef.current = false;
+      if (mapRef.current) mapRef.current.style.cursor = "";
+      onMapClickRef.current(e.latlng.lat, e.latlng.lng);
+    };
+
+    map.once("click", handler);
+    return () => {
+      map.off("click", handler);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creatingNote, creatingPoi, mapReady]);
 
   const handleLocate = useCallback(() => {
     if (!mapInstanceRef.current || !navigator.geolocation) return;

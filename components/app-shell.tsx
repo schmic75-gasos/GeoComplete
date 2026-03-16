@@ -556,9 +556,20 @@ export default function AppShell() {
               <div className="flex items-center gap-2 rounded-lg bg-accent/90 backdrop-blur border border-accent px-3 py-1.5 shadow-sm">
                 <Crosshair size={14} className="text-accent-foreground" />
                 <span className="text-xs text-accent-foreground font-medium">
-                  {locale === "cs" ? "Kliknete na mapu" : "Click on the map"}
+                  {locale === "cs" ? "Klikněte na mapu pro poznámku" : "Click on the map to place note"}
                 </span>
                 <button onClick={() => setCreatingNote(false)} className="text-accent-foreground hover:text-foreground ml-1">
+                  <X size={12} />
+                </button>
+              </div>
+            )}
+            {creatingPoi && (
+              <div className="flex items-center gap-2 rounded-lg bg-primary/90 backdrop-blur border border-primary px-3 py-1.5 shadow-sm">
+                <MapPin size={14} className="text-primary-foreground animate-bounce" />
+                <span className="text-xs text-primary-foreground font-medium">
+                  {locale === "cs" ? "Klikněte na mapu pro umístění" : "Click on the map to place POI"}
+                </span>
+                <button onClick={() => setCreatingPoi(false)} className="text-primary-foreground hover:text-primary-foreground/70 ml-1">
                   <X size={12} />
                 </button>
               </div>
@@ -586,6 +597,7 @@ export default function AppShell() {
               }
             }}
             creatingNote={creatingNote}
+            creatingPoi={creatingPoi}
             mapLayer={mapLayer}
             onMapLayerChange={handleMapLayerChange}
             locale={locale}
@@ -705,19 +717,6 @@ export default function AppShell() {
               onClose={() => { setPoiDialogOpen(false); setPoiCreatePos(null); }}
               onAdded={() => { setPoiDialogOpen(false); setPoiCreatePos(null); }}
             />
-          )}
-
-          {/* Cancel POI placement banner */}
-          {creatingPoi && (
-            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[600] flex items-center gap-3 rounded-xl border border-border bg-card/95 backdrop-blur px-4 py-2.5 shadow-xl">
-              <MapPin size={15} className="text-primary animate-bounce" />
-              <span className="text-sm font-medium text-foreground">
-                {locale === "cs" ? "Klikněte na mapu pro umístění místa" : "Click on the map to place the POI"}
-              </span>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setCreatingPoi(false)}>
-                {t(locale, "poi", "cancelPlacement")}
-              </Button>
-            </div>
           )}
 
           <Toaster richColors position="bottom-right" />
