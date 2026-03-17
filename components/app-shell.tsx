@@ -705,32 +705,32 @@ export default function AppShell() {
           )}
         </div>
 
-          {/* Note creation dialog */}
-          {noteCreatePos && (
-            <CreateNoteDialog
-              open={true}
-              lat={noteCreatePos.lat}
-              lon={noteCreatePos.lon}
-              locale={locale}
-              onClose={() => setNoteCreatePos(null)}
-              onCreated={() => { setNoteCreatePos(null); loadNotes(); }}
-            />
-          )}
+        {/* Note creation dialog - OUTSIDE map container for proper z-index */}
+        {noteCreatePos && (
+          <CreateNoteDialog
+            open={true}
+            lat={noteCreatePos.lat}
+            lon={noteCreatePos.lon}
+            locale={locale}
+            onClose={() => setNoteCreatePos(null)}
+            onCreated={() => { setNoteCreatePos(null); loadNotes(); }}
+          />
+        )}
 
-          {/* Add POI dialog */}
-          {poiCreatePos && (
-            <AddPoiDialog
-              open={true}
-              lat={poiCreatePos.lat}
-              lon={poiCreatePos.lon}
-              locale={locale}
-              user={user}
-              onClose={() => { setPoiDialogOpen(false); setPoiCreatePos(null); }}
-              onAdded={() => { setPoiDialogOpen(false); setPoiCreatePos(null); }}
-            />
-          )}
+        {/* Add POI dialog - OUTSIDE map container for proper z-index */}
+        {poiCreatePos && (
+          <AddPoiDialog
+            open={true}
+            lat={poiCreatePos.lat}
+            lon={poiCreatePos.lon}
+            locale={locale}
+            user={user}
+            onClose={() => { setPoiDialogOpen(false); setPoiCreatePos(null); }}
+            onAdded={() => { setPoiDialogOpen(false); setPoiCreatePos(null); }}
+          />
+        )}
 
-          <Toaster richColors position="bottom-right" />
+        <Toaster richColors position="bottom-right" />
       </div>
     </TooltipProvider>
   );
