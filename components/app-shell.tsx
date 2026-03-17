@@ -117,12 +117,23 @@ export default function AppShell() {
 
     setLoading(true);
     try {
-      const items = await fetchQuests(bounds, activeTypes, 150);
-      const solvedIds = new Set(getSolvedQuests().map((s) => `${s.questTypeId}-${s.elementId}`));
-      const filtered = items.filter((q) => !solvedIds.has(`${q.questTypeId}-${q.id}`));
-      allFetchedQuestsRef.current = filtered;
+      // Fetch from new cached API instead of Overpass directly
+      const res = await fetch("/api/quests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bounds,
+          questTypes: activeTypes.map((qt) => qt.id),
+        }),
+      });
+      
+      const data = await res.json();
+      if (!data.quests) throw new Error(data.error || "Failed to fetch quests");
+      
+      const items = data.quests as typeof quests;
+      allFetchedQuestsRef.current = items;
       // Apply enabled filter immediately
-      const visible = filtered.filter((q) => enabledTypes.includes(q.questTypeId));
+      const visible = items.filter((q) => enabledTypes.includes(q.questTypeId));
       setQuests(visible);
       setCacheStats(getCacheStats());
     } catch (err) {
