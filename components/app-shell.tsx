@@ -709,7 +709,7 @@ export default function AppShell() {
           {/* Add POI dialog */}
           {poiCreatePos && (
             <AddPoiDialog
-              open={poiDialogOpen}
+              open={true}
               lat={poiCreatePos.lat}
               lon={poiCreatePos.lon}
               locale={locale}

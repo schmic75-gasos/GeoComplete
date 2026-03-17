@@ -19,14 +19,18 @@ function escapeXml(str: string): string {
 async function getOrCreateChangeset(
   token: string,
   osmUserId: number,
-  comment: string,
+  questTypeId: string,
   sql: ReturnType<typeof neon>
 ): Promise<string> {
-  // 1. Find a recent open changeset for this user
+  // Use questTypeId in comment so different quest types get separate changesets
+  const comment = `GeoComplete: ${questTypeId}`;
+
+  // 1. Find a recent open changeset for this user+questTypeId combo
   const rows = await sql`
     SELECT id, changeset_id, edit_count, last_used_at
     FROM changeset_pool
     WHERE osm_user_id = ${osmUserId}
+      AND comment = ${comment}
       AND closed = FALSE
       AND last_used_at > NOW() - INTERVAL '30 minutes'
       AND edit_count < ${CHANGESET_MAX_EDITS}
@@ -130,8 +134,7 @@ export async function POST(request: Request) {
 
     // 2. Get or create pooled changeset (async close stale ones first)
     await closeStaleChangesets(osmUser.id, sql, token);
-    const changesetComment = comment || `Survey edits via GeoComplete`;
-    const changesetId = await getOrCreateChangeset(token, osmUser.id, changesetComment, sql);
+    const changesetId = await getOrCreateChangeset(token, osmUser.id, questTypeId || "custom", sql);
 
     // 3. Build updated tag set
     const tags: Record<string, string> = { ...(element.tags || {}) };
@@ -165,7 +168,7 @@ export async function POST(request: Request) {
       // If changeset is closed on OSM side, mark it in DB and retry once
       if (updateRes.status === 409 && errText.includes("closed")) {
         await sql`UPDATE changeset_pool SET closed = TRUE WHERE changeset_id = ${changesetId}`;
-        const freshId = await getOrCreateChangeset(token, osmUser.id, changesetComment, sql);
+        const freshId = await getOrCreateChangeset(token, osmUser.id, questTypeId || "custom", sql);
         const retryXml = updateXml.replace(new RegExp(`changeset="${changesetId}"`, "g"), `changeset="${freshId}"`);
         const retry = await fetch(`${OSM_API}/${elementType}/${elementId}`, {
           method: "PUT",
