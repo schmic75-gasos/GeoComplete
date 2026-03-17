@@ -35,15 +35,38 @@ interface QuestPanelProps {
   onClose: () => void;
   onSolved: () => void;
   onCustomTag?: () => void;
-}
+    }
+  };
 
-export default function QuestPanel({ quest, locale, user, onClose, onSolved, onCustomTag }: QuestPanelProps) {
-  const [selectedAnswer, setSelectedAnswer] = useState<string>("");
-  const [textAnswer, setTextAnswer] = useState("");
-  const [numberAnswer, setNumberAnswer] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const handleSkip = async () => {
+    if (!user) {
+      toast.error(t(locale, "auth", "loginRequired"));
+      return;
+    }
 
-  const questType = QUEST_TYPES.find((qt) => qt.id === quest.questTypeId);
+    setSkipping(true);
+    try {
+      const res = await fetch("/api/user/skip-quest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          questTypeId: quest.questTypeId,
+          elementId: quest.id,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success(locale === "cs" ? "Úkol skipnut" : "Quest skipped");
+        onClose();
+      } else {
+        toast.error(locale === "cs" ? "Chyba" : "Error");
+      }
+    } catch (err) {
+      toast.error(locale === "cs" ? "Chyba" : "Error");
+    } finally {
+      setSkipping(false);
+    }
+  };
   if (!questType) return null;
 
   const IconComp = ICON_MAP[questType.icon] || MapPin;
@@ -106,6 +129,17 @@ export default function QuestPanel({ quest, locale, user, onClose, onSolved, onC
           changesetId: data.changesetId,
         };
         addSolvedQuest(solved);
+        
+        // Also mark in DB for caching purposes
+        fetch("/api/user/solved-quest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            questTypeId: quest.questTypeId,
+            elementId: quest.id,
+          }),
+        }).catch(() => {}); // Silent fail — local store is primary
+        
         toast.success(t(locale, "quests", "solved"), {
           description: `${questType.osmTag}=${value}`,
           action: data.changesetId ? {
@@ -253,7 +287,7 @@ export default function QuestPanel({ quest, locale, user, onClose, onSolved, onC
 
       {/* Actions */}
       <div className="flex gap-2 border-t border-border p-3 bg-card">
-        <Button variant="ghost" size="sm" className="shrink-0" onClick={onClose}>
+        <Button variant="ghost" size="sm" className="shrink-0" onClick={handleSkip} disabled={skipping}>
           {t(locale, "app", "skip")}
         </Button>
         {onCustomTag && (
