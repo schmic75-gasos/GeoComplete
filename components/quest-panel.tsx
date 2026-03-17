@@ -35,8 +35,17 @@ interface QuestPanelProps {
   onClose: () => void;
   onSolved: () => void;
   onCustomTag?: () => void;
-    }
-  };
+}
+
+export default function QuestPanel({ quest, locale, user, onClose, onSolved, onCustomTag }: QuestPanelProps) {
+  const [selectedAnswer, setSelectedAnswer] = useState<string>("");
+  const [textAnswer, setTextAnswer] = useState("");
+  const [numberAnswer, setNumberAnswer] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [skipping, setSkipping] = useState(false);
+
+  const questType = QUEST_TYPES.find((qt) => qt.id === quest.questTypeId);
+  if (!questType) return null;
 
   const handleSkip = async () => {
     if (!user) {
@@ -67,7 +76,6 @@ interface QuestPanelProps {
       setSkipping(false);
     }
   };
-  if (!questType) return null;
 
   const IconComp = ICON_MAP[questType.icon] || MapPin;
   const title = t(locale, "quests", questType.titleKey);
