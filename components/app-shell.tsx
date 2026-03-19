@@ -1,4 +1,6 @@
 "use client";
+// GeoComplete app shell — main UI component
+
 // app-shell — last fix: handleQuestSolved declaration restored
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -37,7 +39,7 @@ const GeoMap = dynamic(() => import("@/components/geo-map"), { ssr: false });
 
 type SidebarTab = "quests" | "notes" | "stats" | "filter" | "leaderboard" | "settings";
 
-export default function AppShell() {
+export default function AppShell(): React.ReactNode {
   const [locale, setLocaleState] = useState<Locale>("en");
   const [user, setUser] = useState<OsmUser | null>(null);
   const [quests, setQuests] = useState<QuestItem[]>([]);
