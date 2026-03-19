@@ -1,4 +1,5 @@
 "use client";
+// app-shell — last fix: handleQuestSolved declaration restored
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
@@ -295,6 +296,8 @@ export default function AppShell() {
     );
     setQuests((prev) => prev.filter((q) => !(q.questTypeId === questTypeId && q.id === elementId)));
   }, [addSkipped]);
+
+  const handleQuestSolved = () => {
     setSelectedQuest(null);
     setCustomTagMode(false);
     setSolved(getSolvedQuests());
