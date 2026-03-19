@@ -182,8 +182,7 @@ export async function POST(req: Request) {
       WHERE tile_key = ANY(${allTileKeys})
         AND quest_types_key = ${questTypesKey}
         AND created_at > NOW() - INTERVAL '24 hours'
-    `;
-    const cachedTileSet = new Set(cachedTiles.map((r: any) => r.tile_key as string));
+    `;    const cachedTileSet = new Set(cachedTiles.map((r: any) => r.tile_key as string));
     const missingTileKeys = allTileKeys.filter((k) => !cachedTileSet.has(k));
 
     // 3. Fetch missing tiles from Overpass
@@ -216,49 +215,46 @@ export async function POST(req: Request) {
 
       // Bulk upsert into DB
       for (const [tileKey, items] of tileItemMap) {
-        // Upsert tile record
-        await sql`
-          INSERT INTO quests_cache (bbox_key, tile_key, quest_type_id, quest_types_key, element_id, element_type, lat, lon, data)
-          SELECT
-            ${tileKey},
-            ${tileKey},
-            item->>'questTypeId',
-            ${questTypesKey},
-            item->>'id',
-            item->>'elementType',
-            (item->>'lat')::float,
-            (item->>'lon')::float,
-            item - 'id' - 'questTypeId' - 'elementType' - 'lat' - 'lon'
-          FROM jsonb_array_elements(${JSON.stringify(items.map(q => ({
-            ...q,
-            id: String(q.id),
-            lat: q.lat,
-            lon: q.lon,
-          })))}::jsonb) AS item
-          ON CONFLICT (bbox_key, quest_type_id, element_id) DO NOTHING
-        `.catch(() => {
-          // If bulk fails, insert individually
-          return Promise.all(items.map((q) =>
-            sql`
-              INSERT INTO quests_cache (bbox_key, tile_key, quest_type_id, quest_types_key, element_id, element_type, lat, lon, data)
-              VALUES (
-                ${tileKey}, ${tileKey}, ${q.questTypeId}, ${questTypesKey},
-                ${String(q.id)}, ${q.elementType}, ${q.lat}, ${q.lon},
-                ${JSON.stringify({ tags: q.tags, type: q.type })}
-              )
-              ON CONFLICT (bbox_key, quest_type_id, element_id) DO NOTHING
-            `.catch(() => null)
-          ));
-        });
+        if (items.length > 0) {
+          // Insert actual quest items
+          await sql`
+            INSERT INTO quests_cache (bbox_key, tile_key, quest_type_id, quest_types_key, element_id, element_type, lat, lon, data)
+            SELECT
+              ${tileKey},
+              ${tileKey},
+              item->>'questTypeId',
+              ${questTypesKey},
+              item->>'id',
+              item->>'elementType',
+              (item->>'lat')::float,
+              (item->>'lon')::float,
+              item - 'id' - 'questTypeId' - 'elementType' - 'lat' - 'lon'
+            FROM jsonb_array_elements(${JSON.stringify(items.map(q => ({
+              ...q,
+              id: String(q.id),
+              lat: q.lat,
+              lon: q.lon,
+            })))}::jsonb) AS item
+            ON CONFLICT (bbox_key, quest_type_id, element_id) DO NOTHING
+          `.catch(() => { /* ignore duplicate errors */ });
+        } else {
+          // Insert a sentinel row so this tile is not re-fetched
+          await sql`
+            INSERT INTO quests_cache (bbox_key, tile_key, quest_type_id, quest_types_key, element_id, element_type, lat, lon, data)
+            VALUES (${tileKey}, ${tileKey}, '__empty__', ${questTypesKey}, '__sentinel__', 'node', 0, 0, '{}'::jsonb)
+            ON CONFLICT (bbox_key, quest_type_id, element_id) DO UPDATE SET created_at = NOW()
+          `.catch(() => { /* ignore */ });
+        }
       }
     }
 
-    // 4. Fetch all items for requested tiles from DB
+    // 4. Fetch all items for requested tiles from DB (exclude sentinel rows)
     const rows = await sql`
       SELECT element_id, quest_type_id, element_type, lat, lon, data
       FROM quests_cache
       WHERE tile_key = ANY(${allTileKeys})
         AND quest_type_id = ANY(${questTypeIds})
+        AND element_id != '__sentinel__'
         AND created_at > NOW() - INTERVAL '24 hours'
     `;
 

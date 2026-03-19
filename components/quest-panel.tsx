@@ -34,47 +34,37 @@ interface QuestPanelProps {
   user: OsmUser | null;
   onClose: () => void;
   onSolved: () => void;
+  onSkipped?: (questTypeId: string, elementId: string) => void;
   onCustomTag?: () => void;
 }
 
-export default function QuestPanel({ quest, locale, user, onClose, onSolved, onCustomTag }: QuestPanelProps) {
+export default function QuestPanel({ quest, locale, user, onClose, onSolved, onSkipped, onCustomTag }: QuestPanelProps) {
   const [selectedAnswer, setSelectedAnswer] = useState<string>("");
   const [textAnswer, setTextAnswer] = useState("");
   const [numberAnswer, setNumberAnswer] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [skipping, setSkipping] = useState(false);
 
   const questType = QUEST_TYPES.find((qt) => qt.id === quest.questTypeId);
   if (!questType) return null;
 
-  const handleSkip = async () => {
-    if (!user) {
-      toast.error(t(locale, "auth", "loginRequired"));
-      return;
+  const handleSkip = () => {
+    // Always works, even without login — localStorage-backed
+    if (onSkipped) {
+      onSkipped(quest.questTypeId, quest.id);
+    } else {
+      onClose();
     }
 
-    setSkipping(true);
-    try {
-      const res = await fetch("/api/user/skip-quest", {
+    // Also persist to DB for logged-in users (fire-and-forget)
+    if (user) {
+      fetch("/api/user/skip-quest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          questTypeId: quest.questTypeId,
-          elementId: quest.id,
-        }),
-      });
-
-      if (res.ok) {
-        toast.success(locale === "cs" ? "Úkol skipnut" : "Quest skipped");
-        onClose();
-      } else {
-        toast.error(locale === "cs" ? "Chyba" : "Error");
-      }
-    } catch (err) {
-      toast.error(locale === "cs" ? "Chyba" : "Error");
-    } finally {
-      setSkipping(false);
+        body: JSON.stringify({ questTypeId: quest.questTypeId, elementId: quest.id }),
+      }).catch(() => {});
     }
+
+    toast(locale === "cs" ? "Úkol přeskočen" : "Quest skipped", { duration: 1500 });
   };
 
   const IconComp = ICON_MAP[questType.icon] || MapPin;
@@ -295,7 +285,7 @@ export default function QuestPanel({ quest, locale, user, onClose, onSolved, onC
 
       {/* Actions */}
       <div className="flex gap-2 border-t border-border p-3 bg-card">
-        <Button variant="ghost" size="sm" className="shrink-0" onClick={handleSkip} disabled={skipping}>
+        <Button variant="ghost" size="sm" className="shrink-0" onClick={handleSkip}>
           {t(locale, "app", "skip")}
         </Button>
         {onCustomTag && (

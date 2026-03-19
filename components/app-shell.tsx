@@ -70,6 +70,12 @@ export default function AppShell() {
 
   const boundsRef = useRef<BBox | null>(null);
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // GPS readiness: don't load quests until GPS resolves or times out
+  const [gpsReady, setGpsReady] = useState(false);
+  const gpsReadyRef = useRef(false);
+
+  // Skip storage key (localStorage, works for both authed and anonymous users)
+  const SKIP_KEY = "gc_skipped_quests_v1";
 
   // Init
   useEffect(() => {
@@ -104,7 +110,53 @@ export default function AppShell() {
     if (savedLayer) setMapLayer(savedLayer);
 
     setCacheStats(getCacheStats());
+
+    // GPS: try to get user location; load quests only after GPS resolves or times out
+    const gpsTimeout = setTimeout(() => {
+      if (!gpsReadyRef.current) {
+        gpsReadyRef.current = true;
+        setGpsReady(true);
+      }
+    }, 3000);
+
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        () => {
+          clearTimeout(gpsTimeout);
+          gpsReadyRef.current = true;
+          setGpsReady(true);
+        },
+        () => {
+          clearTimeout(gpsTimeout);
+          gpsReadyRef.current = true;
+          setGpsReady(true);
+        },
+        { timeout: 4000, maximumAge: 30000 }
+      );
+    } else {
+      clearTimeout(gpsTimeout);
+      gpsReadyRef.current = true;
+      setGpsReady(true);
+    }
+
+    return () => clearTimeout(gpsTimeout);
   }, []);
+
+  // --- Local skip helpers (localStorage, no login required) ---
+  const getSkippedSet = useCallback((): Set<string> => {
+    try {
+      const raw = localStorage.getItem(SKIP_KEY);
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch { return new Set(); }
+  }, [SKIP_KEY]);
+
+  const addSkipped = useCallback((questTypeId: string, elementId: string) => {
+    try {
+      const set = getSkippedSet();
+      set.add(`${questTypeId}|${elementId}`);
+      localStorage.setItem(SKIP_KEY, JSON.stringify([...set]));
+    } catch { /* ignore */ }
+  }, [getSkippedSet, SKIP_KEY]);
 
   const loadQuests = useCallback(async (bounds: BBox) => {
     if (isBBoxTooLarge(bounds)) {
@@ -129,8 +181,12 @@ export default function AppShell() {
       
       const data = await res.json();
       if (!data.quests) throw new Error(data.error || "Failed to fetch quests");
-      
-      const items = data.quests as typeof quests;
+
+      const skipped = getSkippedSet();
+      const solvedIds = new Set(getSolvedQuests().map((s) => `${s.questTypeId}-${s.elementId}`));
+      const items = (data.quests as typeof quests).filter(
+        (q) => !skipped.has(`${q.questTypeId}|${q.id}`) && !solvedIds.has(`${q.questTypeId}-${q.id}`)
+      );
       allFetchedQuestsRef.current = items;
       // Apply enabled filter immediately
       const visible = items.filter((q) => enabledTypes.includes(q.questTypeId));
@@ -149,6 +205,7 @@ export default function AppShell() {
     setCurrentZoom(zoom);
     if (!autoLoad) return;
     if (zoom < MIN_ZOOM_FOR_LOAD) return;
+    if (!gpsReadyRef.current) return; // Wait for GPS to resolve first
     if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
     fetchTimeoutRef.current = setTimeout(() => {
       loadQuests(bounds);
@@ -184,6 +241,17 @@ export default function AppShell() {
     if (showNotes && boundsRef.current) loadNotes();
   }, [showNotes, loadNotes]);
 
+  // Once GPS resolves, trigger the first quest load for current bounds
+  useEffect(() => {
+    if (!gpsReady) return;
+    if (!autoLoad) return;
+    if (!boundsRef.current) return;
+    const bounds = boundsRef.current;
+    if (currentZoom >= MIN_ZOOM_FOR_LOAD && !isBBoxTooLarge(bounds)) {
+      loadQuests(bounds);
+    }
+  }, [gpsReady]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleLogin = () => { window.location.href = `/api/osm/auth?origin=${window.location.origin}`; };
   const handleLogout = async () => {
     await fetch("/api/osm/logout", { method: "POST" });
@@ -217,7 +285,16 @@ export default function AppShell() {
       if (showNotes) loadNotes();
     }
   };
-  const handleQuestSolved = () => {
+  const handleQuestSkipped = useCallback((questTypeId: string, elementId: string) => {
+    addSkipped(questTypeId, elementId);
+    setSelectedQuest(null);
+    setMobileSheetOpen(false);
+    // Remove from map immediately
+    allFetchedQuestsRef.current = allFetchedQuestsRef.current.filter(
+      (q) => !(q.questTypeId === questTypeId && q.id === elementId)
+    );
+    setQuests((prev) => prev.filter((q) => !(q.questTypeId === questTypeId && q.id === elementId)));
+  }, [addSkipped]);
     setSelectedQuest(null);
     setCustomTagMode(false);
     setSolved(getSolvedQuests());
@@ -299,6 +376,7 @@ export default function AppShell() {
             user={user}
             onClose={() => setSelectedQuest(null)}
             onSolved={handleQuestSolved}
+            onSkipped={handleQuestSkipped}
             onCustomTag={() => setCustomTagMode(true)}
           />
         );
@@ -633,6 +711,7 @@ export default function AppShell() {
                     user={user}
                     onClose={() => { setSelectedQuest(null); setMobileSheetOpen(false); }}
                     onSolved={handleQuestSolved}
+                    onSkipped={handleQuestSkipped}
                     onCustomTag={() => setCustomTagMode(true)}
                   />
                 )}
